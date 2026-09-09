@@ -1,0 +1,22 @@
+[package]
+name = "coresettings"
+version = "26.1.0"
+edition = "2021"
+license = "TCL"
+description = "CoreSettings for TontooOS - read hardware and OS facts from the settings daemon over its unix socket"
+authors = ["arlomu"]
+repository = "https://github.com/TontooOS/Libs"
+readme = "README.md"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "coresettings"
+path = "src/lib.rs"
+
+[[example]]
+name = "print_system"
+path = "examples/print_system.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
