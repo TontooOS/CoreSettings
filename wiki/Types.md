@@ -137,6 +137,55 @@ impl Os {
 `from_json` parses a daemon `get_os` result. Missing fields fall back to
 the compiled defaults (`TontooOS Seal 26.1.0`, `beta=false`). Never fails.
 
+## `ThemeMode`, `Accent` and `Customize`
+
+```rust
+pub enum ThemeMode {
+  Dark,
+  Light,
+}
+```
+
+```rust
+pub enum Accent {
+  Multicolor,
+  Blue,
+  Red,
+  Orange,
+  Yellow,
+  Green,
+  Teal,
+  Cyan,
+  Indigo,
+  Purple,
+  Purple2,
+  Pink,
+  Gray,
+}
+```
+
+```rust
+pub struct Customize {
+  pub wallpaper: String,
+  pub accent: Accent,
+  pub theme: ThemeMode,
+  pub revision: u64,
+}
+```
+
+```rust
+impl Customize {
+  pub fn from_json(result: &serde_json::Value) -> Customize;
+}
+```
+
+`ThemeMode::from_str` falls back to `Dark`, `Accent::from_str` falls back
+to `Multicolor`. `Accent::as_str` round-trips the daemon spelling and
+`Accent::hex` returns the Settings app display hex (`Multicolor` renders
+blue `#007AFF`). `Customize::from_json` parses a daemon `customize_get`
+result; unknown or missing values fall back to the daemon defaults
+(`THAOELAKE` / multicolor / dark / revision 0). Never fails.
+
 ## Usage / Example
 
 ```rust
@@ -145,6 +194,14 @@ use coresettings::{Hardware, Os};
 let hardware = Hardware::from_json(&reply);
 let basis = hardware.without_details();
 assert_eq!(basis.ram.ram_type.as_str(), "unknown");
+```
+
+```rust
+use coresettings::Customize;
+
+let customize = Customize::from_json(&reply);
+assert_eq!(customize.accent.hex(), "#007AFF");
+println!("theme={} revision={}", customize.theme.as_str(), customize.revision);
 ```
 
 ## Cross References

@@ -147,6 +147,128 @@ impl Default for Os {
 }
 
 // ---------------------------------------------------------------------------
+// Customization (mirrors the daemon `customize` domain)
+// ---------------------------------------------------------------------------
+
+/// Color theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThemeMode {
+  Dark,
+  Light,
+}
+
+impl ThemeMode {
+  pub fn as_str(&self) -> &'static str {
+    match self {
+      Self::Dark => "dark",
+      Self::Light => "light",
+    }
+  }
+
+  pub fn from_str(raw: &str) -> Self {
+    match raw {
+      "light" => Self::Light,
+      _ => Self::Dark,
+    }
+  }
+}
+
+/// Accent color. `Multicolor` is the default element and renders as blue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Accent {
+  Multicolor,
+  Blue,
+  Red,
+  Orange,
+  Yellow,
+  Green,
+  Teal,
+  Cyan,
+  Indigo,
+  Purple,
+  Purple2,
+  Pink,
+  Gray,
+}
+
+impl Accent {
+  pub fn as_str(&self) -> &'static str {
+    match self {
+      Self::Multicolor => "multicolor",
+      Self::Blue => "blue",
+      Self::Red => "red",
+      Self::Orange => "orange",
+      Self::Yellow => "yellow",
+      Self::Green => "green",
+      Self::Teal => "teal",
+      Self::Cyan => "cyan",
+      Self::Indigo => "indigo",
+      Self::Purple => "purple",
+      Self::Purple2 => "purple2",
+      Self::Pink => "pink",
+      Self::Gray => "gray",
+    }
+  }
+
+  pub fn from_str(raw: &str) -> Self {
+    match raw {
+      "blue" => Self::Blue,
+      "red" => Self::Red,
+      "orange" => Self::Orange,
+      "yellow" => Self::Yellow,
+      "green" => Self::Green,
+      "teal" => Self::Teal,
+      "cyan" => Self::Cyan,
+      "indigo" => Self::Indigo,
+      "purple" => Self::Purple,
+      "purple2" => Self::Purple2,
+      "pink" => Self::Pink,
+      "gray" => Self::Gray,
+      _ => Self::Multicolor,
+    }
+  }
+
+  /// Display hex from the Settings app palette. Multicolor renders blue.
+  pub fn hex(&self) -> &'static str {
+    match self {
+      Self::Multicolor | Self::Blue => "#007AFF",
+      Self::Red => "#FF3B30",
+      Self::Orange => "#FF9500",
+      Self::Yellow => "#FFCC00",
+      Self::Green => "#34C759",
+      Self::Teal => "#00C7BE",
+      Self::Cyan => "#30B0C7",
+      Self::Indigo => "#5856D6",
+      Self::Purple => "#AF52DE",
+      Self::Purple2 => "#BF5AF2",
+      Self::Pink => "#FF2D55",
+      Self::Gray => "#8E8E93",
+    }
+  }
+}
+
+/// Effective customization from `customize_get`. Unknown values fall back
+/// to the daemon defaults (multicolor accent, dark theme).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Customize {
+  pub wallpaper: String,
+  pub accent: Accent,
+  pub theme: ThemeMode,
+  pub revision: u64,
+}
+
+impl Default for Customize {
+  fn default() -> Self {
+    Self {
+      wallpaper: "THAOELAKE".to_string(),
+      accent: Accent::Multicolor,
+      theme: ThemeMode::Dark,
+      revision: 0,
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Parsing from daemon JSON replies
 // ---------------------------------------------------------------------------
 
@@ -269,6 +391,29 @@ impl Os {
   }
 }
 
+impl Customize {
+  /// Parse a `customize_get` result object (`wallpaper`, `accent`,
+  /// `theme`, `revision`). Unknown or missing values fall back to the
+  /// daemon defaults, so a corrupt reply can never produce invalid state.
+  pub fn from_json(result: &serde_json::Value) -> Customize {
+    let defaults = Customize::default();
+    Customize {
+      wallpaper: get_str(result, "wallpaper").unwrap_or(defaults.wallpaper),
+      accent: result
+        .get("accent")
+        .and_then(|v| v.as_str())
+        .map(Accent::from_str)
+        .unwrap_or(defaults.accent),
+      theme: result
+        .get("theme")
+        .and_then(|v| v.as_str())
+        .map(ThemeMode::from_str)
+        .unwrap_or(defaults.theme),
+      revision: result.get("revision").and_then(|v| v.as_u64()).unwrap_or(0),
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -322,5 +467,32 @@ mod tests {
     assert_eq!(RamType::from_str("DDR4"), RamType::Ddr4);
     assert_eq!(RamType::from_str("ddr5"), RamType::Ddr5);
     assert_eq!(RamType::from_str("LPDDR5"), RamType::Unknown);
+  }
+
+  #[test]
+  fn parse_customize_fixture() {
+    let customize = Customize::from_json(&serde_json::json!({
+      "wallpaper": "SONOMA",
+      "accent": "blue",
+      "theme": "light",
+      "revision": 7,
+    }));
+    assert_eq!(customize.wallpaper, "SONOMA");
+    assert_eq!(customize.accent, Accent::Blue);
+    assert_eq!(customize.accent.as_str(), "blue");
+    assert_eq!(customize.accent.hex(), "#007AFF");
+    assert_eq!(customize.theme, ThemeMode::Light);
+    assert_eq!(customize.revision, 7);
+  }
+
+  #[test]
+  fn customize_unknown_values_fall_back_to_defaults() {
+    let customize = Customize::from_json(&serde_json::json!({
+      "accent": "neon",
+      "theme": "sepia",
+    }));
+    assert_eq!(customize, Customize::default());
+    assert_eq!(Accent::from_str("neon"), Accent::Multicolor);
+    assert_eq!(ThemeMode::from_str("sepia"), ThemeMode::Dark);
   }
 }

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::error::{ProviderError, Result};
-use crate::types::{Hardware, Os};
+use crate::types::{Customize, Hardware, Os};
 
 /// Default daemon socket path (mirrors the daemon default).
 pub const DEFAULT_SOCKET_PATH: &str = "/run/tontoo-settings.sock";
@@ -76,6 +76,14 @@ impl SettingsProvider {
   pub fn os(&self) -> Result<Os> {
     let result = self.request("get_os")?;
     Ok(Os::from_json(&result))
+  }
+
+  /// Read effective customization (`customize_get` via the daemon):
+  /// wallpaper, accent, theme plus the revision counter for change
+  /// polling.
+  pub fn customize(&self) -> Result<Customize> {
+    let result = self.request("customize_get")?;
+    Ok(Customize::from_json(&result))
   }
 
   fn request(&self, op: &str) -> Result<serde_json::Value> {

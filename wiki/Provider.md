@@ -44,6 +44,7 @@ impl SettingsProvider {
   pub fn ping(&self) -> Result<bool>;
   pub fn hardware(&self, detailed: bool) -> Result<Hardware>;
   pub fn os(&self) -> Result<Os>;
+  pub fn customize(&self) -> Result<Customize>;
 }
 ```
 
@@ -54,6 +55,8 @@ impl SettingsProvider {
   everything the daemon collected.
 - `os` reads `os.fico` through the daemon. Missing fields fall back to the
   compiled defaults (`TontooOS Seal 26.1.0`).
+- `customize` reads the effective customization (`customize_get`):
+  wallpaper, accent, theme plus the revision counter for change polling.
 
 ## Free Functions
 
@@ -61,6 +64,7 @@ impl SettingsProvider {
 pub fn ping() -> Result<bool>;
 pub fn hardware(detailed: bool) -> Result<Hardware>;
 pub fn os() -> Result<Os>;
+pub fn customize() -> Result<Customize>;
 ```
 
 Same behavior at the default socket path, without constructing a handle.
@@ -85,5 +89,5 @@ if provider.ping()? {
 
 ## Cross References
 
-- [Types.md](Types.md) – shapes returned by `hardware` and `os`
+- [Types.md](Types.md) – shapes returned by `hardware`, `os` and `customize`
 - [Errors.md](Errors.md) – failure policy and error variants
