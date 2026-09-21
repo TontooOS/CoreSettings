@@ -5,7 +5,9 @@ pub mod types;
 
 pub use error::{ProviderError, Result};
 pub use provider::{SettingsProvider, DEFAULT_SOCKET_PATH};
-pub use types::{Accent, Cpu, Customize, Gpu, Hardware, Os, Ram, RamModule, RamType, ThemeMode};
+pub use types::{
+  Accent, Cpu, Customize, GlassAmount, Gpu, Hardware, Os, Ram, RamModule, RamType, ThemeMode,
+};
 
 /// Ping the daemon at the default socket.
 pub fn ping() -> Result<bool> {

@@ -247,13 +247,41 @@ impl Accent {
   }
 }
 
+/// Liquid glass amount: the "LiquidGlass Slider" with much glass,
+/// balanced glass and less glass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GlassAmount {
+  Much,
+  Glass,
+  Less,
+}
+
+impl GlassAmount {
+  pub fn as_str(&self) -> &'static str {
+    match self {
+      Self::Much => "much",
+      Self::Glass => "glass",
+      Self::Less => "less",
+    }
+  }
+
+  pub fn from_str(raw: &str) -> Self {
+    match raw {
+      "much" => Self::Much,
+      "less" => Self::Less,
+      _ => Self::Glass,
+    }
+  }
+}
+
 /// Effective customization from `customize_get`. Unknown values fall back
-/// to the daemon defaults (multicolor accent, dark theme).
+/// to the daemon defaults (multicolor accent, dark theme, glass amount).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Customize {
   pub wallpaper: String,
   pub accent: Accent,
   pub theme: ThemeMode,
+  pub glass: GlassAmount,
   pub revision: u64,
 }
 
@@ -263,6 +291,7 @@ impl Default for Customize {
       wallpaper: "THAOELAKE".to_string(),
       accent: Accent::Multicolor,
       theme: ThemeMode::Dark,
+      glass: GlassAmount::Glass,
       revision: 0,
     }
   }
@@ -393,8 +422,9 @@ impl Os {
 
 impl Customize {
   /// Parse a `customize_get` result object (`wallpaper`, `accent`,
-  /// `theme`, `revision`). Unknown or missing values fall back to the
-  /// daemon defaults, so a corrupt reply can never produce invalid state.
+  /// `theme`, `glass`, `revision`). Unknown or missing values fall back to
+  /// the daemon defaults, so a corrupt reply can never produce invalid
+  /// state.
   pub fn from_json(result: &serde_json::Value) -> Customize {
     let defaults = Customize::default();
     Customize {
@@ -409,6 +439,11 @@ impl Customize {
         .and_then(|v| v.as_str())
         .map(ThemeMode::from_str)
         .unwrap_or(defaults.theme),
+      glass: result
+        .get("glass")
+        .and_then(|v| v.as_str())
+        .map(GlassAmount::from_str)
+        .unwrap_or(defaults.glass),
       revision: result.get("revision").and_then(|v| v.as_u64()).unwrap_or(0),
     }
   }
@@ -475,6 +510,7 @@ mod tests {
       "wallpaper": "SONOMA",
       "accent": "blue",
       "theme": "light",
+      "glass": "less",
       "revision": 7,
     }));
     assert_eq!(customize.wallpaper, "SONOMA");
@@ -482,6 +518,7 @@ mod tests {
     assert_eq!(customize.accent.as_str(), "blue");
     assert_eq!(customize.accent.hex(), "#007AFF");
     assert_eq!(customize.theme, ThemeMode::Light);
+    assert_eq!(customize.glass, GlassAmount::Less);
     assert_eq!(customize.revision, 7);
   }
 

@@ -165,13 +165,25 @@ pub enum Accent {
 ```
 
 ```rust
+pub enum GlassAmount {
+  Much,
+  Glass,
+  Less,
+}
+```
+
+```rust
 pub struct Customize {
   pub wallpaper: String,
   pub accent: Accent,
   pub theme: ThemeMode,
+  pub glass: GlassAmount,
   pub revision: u64,
 }
 ```
+
+`GlassAmount::from_str` falls back to `Glass`; `as_str` round-trips the
+daemon spelling (`much` / `glass` / `less`).
 
 ```rust
 impl Customize {
