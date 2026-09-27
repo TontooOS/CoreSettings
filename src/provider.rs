@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use crate::error::{ProviderError, Result};
 use crate::types::{Customize, Hardware, Os};
+use foundation::serialization::{JsonDocument, JsonObject};
 
 /// Default daemon socket path (mirrors the daemon default).
 pub const DEFAULT_SOCKET_PATH: &str = "/run/tontoo-settings.sock";
@@ -54,7 +55,10 @@ impl SettingsProvider {
   /// Ping the daemon. Returns `true` on a valid pong reply.
   pub fn ping(&self) -> Result<bool> {
     let result = self.request("ping")?;
-    Ok(result.get("pong").and_then(|v| v.as_bool()).unwrap_or(false))
+    result
+      .bool_field("pong")
+      .map(|v| v.unwrap_or(false))
+      .map_err(|e| ProviderError::Protocol(e.to_string()))
   }
 
   /// Read hardware facts (`sys.fico` via the daemon).
@@ -86,7 +90,7 @@ impl SettingsProvider {
     Ok(Customize::from_json(&result))
   }
 
-  fn request(&self, op: &str) -> Result<serde_json::Value> {
+  fn request(&self, op: &str) -> Result<JsonDocument> {
     if !self.socket_path.exists() {
       return Err(ProviderError::SocketMissing(
         self.socket_path.to_string_lossy().into_owned(),
@@ -102,7 +106,15 @@ impl SettingsProvider {
       .map_err(|e| ProviderError::Connection(e.to_string()))?;
     let mut reader = BufReader::new(stream);
 
-    let line = serde_json::json!({"id": 1, "op": op}).to_string() + "\n";
+    let mut request = JsonObject::new();
+    request
+      .field_f64("id", 1.0)
+      .map_err(|e| ProviderError::Protocol(e.to_string()))?;
+    request.field_str("op", op);
+    let line = request
+      .build(false)
+      .map_err(|e| ProviderError::Protocol(e.to_string()))?
+      + "\n";
     writer
       .write_all(line.as_bytes())
       .and_then(|_| writer.flush())
@@ -112,17 +124,25 @@ impl SettingsProvider {
     reader
       .read_line(&mut reply)
       .map_err(|e| ProviderError::Connection(e.to_string()))?;
-    let frame: serde_json::Value =
-      serde_json::from_str(&reply).map_err(|e| ProviderError::Protocol(e.to_string()))?;
-    if frame.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
-      Ok(frame.get("result").cloned().unwrap_or(serde_json::Value::Null))
+    let frame =
+      JsonDocument::parse(&reply).map_err(|e| ProviderError::Protocol(e.to_string()))?;
+    let ok = frame
+      .bool_field("ok")
+      .map_err(|e| ProviderError::Protocol(e.to_string()))?
+      .unwrap_or(false);
+    if ok {
+      Ok(
+        frame
+          .nested("result")
+          .map_err(|e| ProviderError::Protocol(e.to_string()))?
+          .unwrap_or_else(JsonDocument::empty),
+      )
     } else {
       Err(ProviderError::Server(
         frame
-          .get("error")
-          .and_then(|v| v.as_str())
-          .unwrap_or("unknown error")
-          .to_string(),
+          .str_field("error")
+          .map_err(|e| ProviderError::Protocol(e.to_string()))?
+          .unwrap_or_else(|| "unknown error".to_string()),
       ))
     }
   }

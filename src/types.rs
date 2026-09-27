@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
+use foundation::serialization::JsonDocument;
 
 // ---------------------------------------------------------------------------
 // RAM type (DDR4/DDR5 only, like the daemon backend)
 // ---------------------------------------------------------------------------
 
 /// Classified RAM type. Only DDR4 and DDR5 are distinguished.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RamType {
   Ddr4,
   Ddr5,
@@ -35,7 +35,7 @@ impl RamType {
 // ---------------------------------------------------------------------------
 
 /// Processor facts.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct Cpu {
   pub name: Option<String>,
   pub vendor: Option<String>,
@@ -45,7 +45,7 @@ pub struct Cpu {
 }
 
 /// Graphics device facts. `vram_mb` is `None` for shared-memory GPUs.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct Gpu {
   pub name: Option<String>,
   pub vendor_id: Option<String>,
@@ -58,7 +58,7 @@ pub struct Gpu {
 }
 
 /// One physical RAM module. Detailed only.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct RamModule {
   pub locator: Option<String>,
   pub size_mb: Option<u64>,
@@ -68,7 +68,7 @@ pub struct RamModule {
 }
 
 /// Memory facts.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Ram {
   pub total_mb: u64,
   pub total_gb: f64,
@@ -93,7 +93,7 @@ impl Default for Ram {
 }
 
 /// Full hardware snapshot.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct Hardware {
   pub cpu: Cpu,
   pub gpus: Vec<Gpu>,
@@ -125,7 +125,7 @@ impl Hardware {
 // ---------------------------------------------------------------------------
 
 /// OS identity facts.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Os {
   pub name: String,
   pub display_name: String,
@@ -151,7 +151,7 @@ impl Default for Os {
 // ---------------------------------------------------------------------------
 
 /// Color theme.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeMode {
   Dark,
   Light,
@@ -174,7 +174,7 @@ impl ThemeMode {
 }
 
 /// Accent color. `Multicolor` is the default element and renders as blue.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Accent {
   Multicolor,
   Blue,
@@ -249,7 +249,7 @@ impl Accent {
 
 /// Liquid glass amount: the "LiquidGlass Slider" with much glass,
 /// balanced glass and less glass.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GlassAmount {
   Much,
   Glass,
@@ -276,7 +276,7 @@ impl GlassAmount {
 
 /// Effective customization from `customize_get`. Unknown values fall back
 /// to the daemon defaults (multicolor accent, dark theme, glass amount).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Customize {
   pub wallpaper: String,
   pub accent: Accent,
@@ -298,106 +298,83 @@ impl Default for Customize {
 }
 
 // ---------------------------------------------------------------------------
-// Parsing from daemon JSON replies
+// Parsing from daemon JSON replies (via Foundation's std-only JsonDocument)
 // ---------------------------------------------------------------------------
 
-fn get_str(value: &serde_json::Value, key: &str) -> Option<String> {
-  value.get(key)?.as_str().map(|s| s.to_string())
+fn section(result: &JsonDocument, name: &str) -> JsonDocument {
+  result
+    .nested(name)
+    .unwrap_or(None)
+    .unwrap_or_else(JsonDocument::empty)
 }
 
-fn get_u64(value: &serde_json::Value, key: &str) -> Option<u64> {
-  value.get(key)?.as_u64()
-}
-
-fn get_f64(value: &serde_json::Value, key: &str) -> Option<f64> {
-  value.get(key)?.as_f64()
-}
-
-fn get_bool(value: &serde_json::Value, key: &str) -> Option<bool> {
-  value.get(key)?.as_bool()
-}
-
-fn section<'a>(result: &'a serde_json::Value, name: &str) -> serde_json::Value {
-  result.get(name).cloned().unwrap_or(serde_json::Value::Null)
-}
-
-fn null_section() -> serde_json::Value {
-  serde_json::Value::Null
+fn parse_module(value: &JsonDocument) -> RamModule {
+  RamModule {
+    locator: value.str_field("locator").unwrap_or(None),
+    size_mb: value.u64_field("size_mb").unwrap_or(None),
+    speed_mts: value.u64_field("speed_mts").unwrap_or(None),
+    manufacturer: value.str_field("manufacturer").unwrap_or(None),
+    part_number: value.str_field("part_number").unwrap_or(None),
+  }
 }
 
 impl Hardware {
   /// Parse a `get_hardware` result object (`processor`, `gpuN`, `ram`).
   /// Unknown GPUs are collected from `gpu0`..`gpuN` until the first gap.
-  pub fn from_json(result: &serde_json::Value) -> Hardware {
+  pub fn from_json(result: &JsonDocument) -> Hardware {
     let processor = section(result, "processor");
     let ram_value = section(result, "ram");
     let mut gpus = Vec::new();
     for index in 0..64 {
-      let gpu_value = section(result, &format!("gpu{}", index));
-      if gpu_value.is_null() {
+      let key = format!("gpu{}", index);
+      let Some(gpu_value) = result.nested(&key).unwrap_or(None) else {
         break;
-      }
+      };
       gpus.push(Gpu {
-        name: get_str(&gpu_value, "name"),
-        vendor_id: get_str(&gpu_value, "vendor_id"),
-        device_id: get_str(&gpu_value, "device_id"),
-        vram_mb: get_u64(&gpu_value, "vram_mb"),
-        pci_slot: get_str(&gpu_value, "pci_slot"),
-        driver: get_str(&gpu_value, "driver"),
-        subsystem: get_str(&gpu_value, "subsystem"),
+        name: gpu_value.str_field("name").unwrap_or(None),
+        vendor_id: gpu_value.str_field("vendor_id").unwrap_or(None),
+        device_id: gpu_value.str_field("device_id").unwrap_or(None),
+        vram_mb: gpu_value.u64_field("vram_mb").unwrap_or(None),
+        pci_slot: gpu_value.str_field("pci_slot").unwrap_or(None),
+        driver: gpu_value.str_field("driver").unwrap_or(None),
+        subsystem: gpu_value.str_field("subsystem").unwrap_or(None),
       });
     }
-    let modules = ram_value
-      .get("modules")
-      .and_then(|v| v.as_array())
-      .cloned()
+    let mut modules_indexed: Vec<RamModule> = ram_value
+      .array_field("modules")
       .unwrap_or_default()
       .iter()
-      .map(|m| RamModule {
-        locator: get_str(m, "locator"),
-        size_mb: get_u64(m, "size_mb"),
-        speed_mts: get_u64(m, "speed_mts"),
-        manufacturer: get_str(m, "manufacturer"),
-        part_number: get_str(m, "part_number"),
-      })
+      .map(parse_module)
       .collect();
-    let mut modules_indexed: Vec<RamModule> = modules;
     // The daemon writes modules as ram.module0..N tables, accept both forms.
     if modules_indexed.is_empty() {
       for index in 0..64 {
         let key = format!("module{}", index);
-        let module_value = ram_value.get(&key).cloned().unwrap_or(null_section());
-        if module_value.is_null() {
+        let Some(module_value) = ram_value.nested(&key).unwrap_or(None) else {
           break;
-        }
-        modules_indexed.push(RamModule {
-          locator: get_str(&module_value, "locator"),
-          size_mb: get_u64(&module_value, "size_mb"),
-          speed_mts: get_u64(&module_value, "speed_mts"),
-          manufacturer: get_str(&module_value, "manufacturer"),
-          part_number: get_str(&module_value, "part_number"),
-        });
+        };
+        modules_indexed.push(parse_module(&module_value));
       }
     }
     Hardware {
       cpu: Cpu {
-        name: get_str(&processor, "name"),
-        vendor: get_str(&processor, "vendor"),
-        cores: get_u64(&processor, "cores").map(|v| v as u32),
-        threads: get_u64(&processor, "threads").map(|v| v as u32),
-        mhz: get_u64(&processor, "mhz"),
+        name: processor.str_field("name").unwrap_or(None),
+        vendor: processor.str_field("vendor").unwrap_or(None),
+        cores: processor.u64_field("cores").unwrap_or(None).map(|v| v as u32),
+        threads: processor.u64_field("threads").unwrap_or(None).map(|v| v as u32),
+        mhz: processor.u64_field("mhz").unwrap_or(None),
       },
       gpus,
       ram: Ram {
-        total_mb: get_u64(&ram_value, "total_mb").unwrap_or(0),
-        total_gb: get_f64(&ram_value, "total_gb").unwrap_or(0.0),
+        total_mb: ram_value.u64_field("total_mb").unwrap_or(None).unwrap_or(0),
+        total_gb: ram_value.f64_field("total_gb").unwrap_or(None).unwrap_or(0.0),
         ram_type: ram_value
-          .get("type")
-          .and_then(|v| v.as_str())
-          .map(RamType::from_str)
+          .str_field("type")
+          .unwrap_or(None)
+          .map(|v| RamType::from_str(&v))
           .unwrap_or(RamType::Unknown),
-        slots_used: get_u64(&ram_value, "slots_used").map(|v| v as u32),
-        slots_total: get_u64(&ram_value, "slots_total").map(|v| v as u32),
+        slots_used: ram_value.u64_field("slots_used").unwrap_or(None).map(|v| v as u32),
+        slots_total: ram_value.u64_field("slots_total").unwrap_or(None).map(|v| v as u32),
         modules: modules_indexed,
       },
     }
@@ -407,15 +384,15 @@ impl Hardware {
 impl Os {
   /// Parse a `get_os` result object (`os` section). Missing fields fall back
   /// to the compiled defaults.
-  pub fn from_json(result: &serde_json::Value) -> Os {
+  pub fn from_json(result: &JsonDocument) -> Os {
     let os_value = section(result, "os");
     let defaults = Os::default();
     Os {
-      name: get_str(&os_value, "name").unwrap_or(defaults.name),
-      display_name: get_str(&os_value, "display_name").unwrap_or(defaults.display_name),
-      codename: get_str(&os_value, "codename").unwrap_or(defaults.codename),
-      version: get_str(&os_value, "version").unwrap_or(defaults.version),
-      beta: get_bool(&os_value, "beta").unwrap_or(defaults.beta),
+      name: os_value.str_field("name").unwrap_or(None).unwrap_or(defaults.name),
+      display_name: os_value.str_field("display_name").unwrap_or(None).unwrap_or(defaults.display_name),
+      codename: os_value.str_field("codename").unwrap_or(None).unwrap_or(defaults.codename),
+      version: os_value.str_field("version").unwrap_or(None).unwrap_or(defaults.version),
+      beta: os_value.bool_field("beta").unwrap_or(None).unwrap_or(defaults.beta),
     }
   }
 }
@@ -425,26 +402,26 @@ impl Customize {
   /// `theme`, `glass`, `revision`). Unknown or missing values fall back to
   /// the daemon defaults, so a corrupt reply can never produce invalid
   /// state.
-  pub fn from_json(result: &serde_json::Value) -> Customize {
+  pub fn from_json(result: &JsonDocument) -> Customize {
     let defaults = Customize::default();
     Customize {
-      wallpaper: get_str(result, "wallpaper").unwrap_or(defaults.wallpaper),
+      wallpaper: result.str_field("wallpaper").unwrap_or(None).unwrap_or(defaults.wallpaper),
       accent: result
-        .get("accent")
-        .and_then(|v| v.as_str())
-        .map(Accent::from_str)
+        .str_field("accent")
+        .unwrap_or(None)
+        .map(|v| Accent::from_str(&v))
         .unwrap_or(defaults.accent),
       theme: result
-        .get("theme")
-        .and_then(|v| v.as_str())
-        .map(ThemeMode::from_str)
+        .str_field("theme")
+        .unwrap_or(None)
+        .map(|v| ThemeMode::from_str(&v))
         .unwrap_or(defaults.theme),
       glass: result
-        .get("glass")
-        .and_then(|v| v.as_str())
-        .map(GlassAmount::from_str)
+        .str_field("glass")
+        .unwrap_or(None)
+        .map(|v| GlassAmount::from_str(&v))
         .unwrap_or(defaults.glass),
-      revision: result.get("revision").and_then(|v| v.as_u64()).unwrap_or(0),
+      revision: result.u64_field("revision").unwrap_or(None).unwrap_or(0),
     }
   }
 }
@@ -453,13 +430,18 @@ impl Customize {
 mod tests {
   use super::*;
 
-  fn hardware_fixture() -> serde_json::Value {
-    serde_json::json!({
-      "processor": {"name": "Test CPU", "vendor": "Intel", "cores": 8, "threads": 16, "mhz": 3700},
-      "gpu0": {"name": "Test GPU", "vendor_id": "0x1002", "vram_mb": 8192, "driver": "amdgpu"},
-      "ram": {"total_mb": 32768, "total_gb": 32.0, "type": "DDR5", "slots_used": 2,
-              "module0": {"locator": "DIMM 0", "size_mb": 16384, "speed_mts": 4800}}
-    })
+  fn hardware_fixture() -> JsonDocument {
+    JsonDocument::parse(
+      r#"{"processor": {"name": "Test CPU", "vendor": "Intel", "cores": 8, "threads": 16, "mhz": 3700},
+          "gpu0": {"name": "Test GPU", "vendor_id": "0x1002", "vram_mb": 8192, "driver": "amdgpu"},
+          "ram": {"total_mb": 32768, "total_gb": 32.0, "type": "DDR5", "slots_used": 2,
+                  "module0": {"locator": "DIMM 0", "size_mb": 16384, "speed_mts": 4800}}}"#,
+    )
+    .unwrap()
+  }
+
+  fn doc(raw: &str) -> JsonDocument {
+    JsonDocument::parse(raw).unwrap()
   }
 
   #[test]
@@ -489,11 +471,11 @@ mod tests {
 
   #[test]
   fn parse_os_fixture_with_defaults() {
-    let os = Os::from_json(&serde_json::json!({"os": {"version": "26.2.0", "beta": true}}));
+    let os = Os::from_json(&doc(r#"{"os": {"version": "26.2.0", "beta": true}}"#));
     assert_eq!(os.version, "26.2.0");
     assert!(os.beta);
     assert_eq!(os.display_name, "TontooOS Seal");
-    let empty = Os::from_json(&serde_json::json!({}));
+    let empty = Os::from_json(&doc(r#"{}"#));
     assert_eq!(empty, Os::default());
   }
 
@@ -506,13 +488,9 @@ mod tests {
 
   #[test]
   fn parse_customize_fixture() {
-    let customize = Customize::from_json(&serde_json::json!({
-      "wallpaper": "SONOMA",
-      "accent": "blue",
-      "theme": "light",
-      "glass": "less",
-      "revision": 7,
-    }));
+    let customize = Customize::from_json(&doc(
+      r#"{"wallpaper": "SONOMA", "accent": "blue", "theme": "light", "glass": "less", "revision": 7}"#,
+    ));
     assert_eq!(customize.wallpaper, "SONOMA");
     assert_eq!(customize.accent, Accent::Blue);
     assert_eq!(customize.accent.as_str(), "blue");
@@ -524,10 +502,7 @@ mod tests {
 
   #[test]
   fn customize_unknown_values_fall_back_to_defaults() {
-    let customize = Customize::from_json(&serde_json::json!({
-      "accent": "neon",
-      "theme": "sepia",
-    }));
+    let customize = Customize::from_json(&doc(r#"{"accent": "neon", "theme": "sepia"}"#));
     assert_eq!(customize, Customize::default());
     assert_eq!(Accent::from_str("neon"), Accent::Multicolor);
     assert_eq!(ThemeMode::from_str("sepia"), ThemeMode::Dark);

@@ -2,7 +2,9 @@
 
 Fact structs mirror the daemon `sys.fico`/`os.fico` sections. Every hardware
 field that has no guaranteed source is `Option`, unknown data is `None`,
-never a placeholder string.
+never a placeholder string. Parsing uses Foundation's std-only
+`JsonDocument`, so this crate has no `serde` dependency; `from_json` takes a
+`foundation::serialization::JsonDocument`.
 
 ## `RamType`
 
@@ -106,7 +108,7 @@ pub struct Hardware {
 
 ```rust
 impl Hardware {
-  pub fn from_json(result: &serde_json::Value) -> Hardware;
+  pub fn from_json(result: &JsonDocument) -> Hardware;
   pub fn without_details(&self) -> Hardware;
 }
 ```
@@ -130,7 +132,7 @@ pub struct Os {
 
 ```rust
 impl Os {
-  pub fn from_json(result: &serde_json::Value) -> Os;
+  pub fn from_json(result: &JsonDocument) -> Os;
 }
 ```
 
@@ -187,7 +189,7 @@ daemon spelling (`much` / `glass` / `less`).
 
 ```rust
 impl Customize {
-  pub fn from_json(result: &serde_json::Value) -> Customize;
+  pub fn from_json(result: &JsonDocument) -> Customize;
 }
 ```
 
@@ -202,7 +204,9 @@ result; unknown or missing values fall back to the daemon defaults
 
 ```rust
 use coresettings::{Hardware, Os};
+use foundation::serialization::JsonDocument;
 
+let reply = JsonDocument::parse(raw)?;
 let hardware = Hardware::from_json(&reply);
 let basis = hardware.without_details();
 assert_eq!(basis.ram.ram_type.as_str(), "unknown");

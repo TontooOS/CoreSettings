@@ -18,5 +18,4 @@ name = "print_system"
 path = "examples/print_system.rs"
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+foundation = { path = "../Foundation" }
