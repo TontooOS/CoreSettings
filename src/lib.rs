@@ -4,7 +4,7 @@ pub mod provider;
 pub mod types;
 
 pub use error::{ProviderError, Result};
-pub use provider::{SettingsProvider, DEFAULT_SOCKET_PATH};
+pub use provider::{DaemonEvent, SettingsProvider, Subscription, DEFAULT_SOCKET_PATH};
 pub use types::{
   Accent, Cpu, Customize, GlassAmount, Gpu, Hardware, Os, Ram, RamModule, RamType, ThemeMode,
 };

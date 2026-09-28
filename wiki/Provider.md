@@ -45,6 +45,7 @@ impl SettingsProvider {
   pub fn hardware(&self, detailed: bool) -> Result<Hardware>;
   pub fn os(&self) -> Result<Os>;
   pub fn customize(&self) -> Result<Customize>;
+  pub fn subscribe(&self, events: &[&str]) -> Result<Subscription>;
 }
 ```
 
@@ -57,6 +58,40 @@ impl SettingsProvider {
   compiled defaults (`TontooOS Seal 26.1.0`).
 - `customize` reads the effective customization (`customize_get`):
   wallpaper, accent, theme plus the revision counter for change polling.
+- `subscribe` opens one persistent connection (`subscribe` op) and returns
+  a `Subscription`. The daemon pushes a frame per matching write op, so no
+  polling is needed. An empty list receives every event.
+
+## Subscription
+
+```rust
+pub struct DaemonEvent {
+  pub name: String,
+  pub payload: JsonDocument,
+}
+
+impl Subscription {
+  pub fn try_next(&mut self) -> Result<Option<DaemonEvent>>;
+}
+```
+
+- `try_next` never blocks: `Ok(None)` means no event arrived yet.
+- `Err` means the daemon closed the connection or sent a malformed frame;
+  drop the handle and resubscribe.
+- `payload` holds the write-op result (e.g. the effective customization
+  with `revision` for `customize_changed`); parse it with
+  `Customize::from_json`.
+
+```rust
+use coresettings::SettingsProvider;
+
+let provider = SettingsProvider::new();
+let mut events = provider.subscribe(&["customize_changed"])?;
+while let Some(event) = events.try_next()? {
+    let customize = coresettings::Customize::from_json(&event.payload);
+    println!("theme is now {:?}", customize.theme);
+}
+```
 
 ## Free Functions
 

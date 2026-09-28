@@ -44,6 +44,9 @@ See [Provider.md](Provider.md) for details.
 
 ## Changelog
 
+- 2026-09-28: Push subscriptions. `SettingsProvider::subscribe` opens one
+  persistent connection and returns a `Subscription`; `try_next` yields
+  pushed `DaemonEvent`s without polling. See [Provider.md](Provider.md).
 - 2026-09-07: Initial lib. `SettingsProvider` socket client (`ping`,
   `hardware`, `os`), fact types with detailed filtering, localized errors,
   `Headers/coresettings.h` stub, `print_system` example.
