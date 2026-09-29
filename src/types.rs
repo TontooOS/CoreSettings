@@ -140,7 +140,7 @@ impl Default for Os {
       name: "TontooOS".to_string(),
       display_name: "TontooOS Seal".to_string(),
       codename: "Seal".to_string(),
-      version: "26.1.0".to_string(),
+      version: "27.0.0".to_string(),
       beta: false,
     }
   }

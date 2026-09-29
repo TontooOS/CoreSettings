@@ -55,7 +55,7 @@ impl SettingsProvider {
   the basis view (see [Types.md](Types.md)), `detailed=true` returns
   everything the daemon collected.
 - `os` reads `os.fico` through the daemon. Missing fields fall back to the
-  compiled defaults (`TontooOS Seal 26.1.0`).
+  compiled defaults (`TontooOS Seal 27.0.0`).
 - `customize` reads the effective customization (`customize_get`):
   wallpaper, accent, theme plus the revision counter for change polling.
 - `subscribe` opens one persistent connection (`subscribe` op) and returns

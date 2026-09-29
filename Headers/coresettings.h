@@ -6,7 +6,7 @@
  * will be added here once the Rust API is stable.
  */
 
-#define TONTOO_CORESETTINGS_VERSION "26.1.0"
+#define TONTOO_CORESETTINGS_VERSION "27.0.0"
 #define TONTOO_CORESETTINGS_DEFAULT_SOCKET "/run/tontoo-settings.sock"
 
 #endif

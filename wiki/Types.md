@@ -137,7 +137,7 @@ impl Os {
 ```
 
 `from_json` parses a daemon `get_os` result. Missing fields fall back to
-the compiled defaults (`TontooOS Seal 26.1.0`, `beta=false`). Never fails.
+the compiled defaults (`TontooOS Seal 27.0.0`, `beta=false`). Never fails.
 
 ## `ThemeMode`, `Accent` and `Customize`
 
